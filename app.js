@@ -315,6 +315,8 @@ function home() {
     [el("button", { class: "btn", type: "button", onclick: freePick }, "進入選題")]));
   grid.append(modeCard("60 色票卡", "實作題以票號作答。可在作答時開啟，也可列印。",
     [el("a", { class: "btn", href: "card.html" }, "開啟色票卡")]));
+  grid.append(modeCard("使用說明", "練習順序建議、實作題作答方式、難度標示。",
+    [el("a", { class: "btn", href: "guide.html" }, "查看說明")]));
   v.append(grid);
   v.append(el("p", { class: "meta" }, `題庫：色彩學 ${BANK.filter(q => q.subj === "L11").length} 題、色彩計畫實務 ${BANK.filter(q => q.subj === "L12").length} 題、色彩管理 ${BANK.filter(q => q.subj === "L13").length} 題，另有 8 種隨機數字計算題。答錯紀錄只存在這台裝置。`));
 }
