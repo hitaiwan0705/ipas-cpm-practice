@@ -87,8 +87,8 @@ const GEN = {
     return mc({ id: "G-06", subj: "L13", codes: ["L13104"], diff: "易", level: "應用", dom: "D6",
       stem: `以濃度計量得某色塊反射率 R = ${R0}。其反射濃度 D 約為多少？`,
       explain: `D = log₁₀(1/R) = log₁₀(${1 / R0}) ≈ ${f(D)}。純白的濃度約為 0。`,
-      trap: "直接把 R 或 1/R 當答案，或取 log₁₀R 得到負值。", src: "計算題模板；科目三指引 2.1" },
-      f(D), [f(R0), f(1 / R0), f(-D)]);
+      trap: "常見錯誤：用自然對數 ln 計算、把吸收比例 1−R 當成濃度、把 R 與 1−R 弄混。", src: "計算題模板；科目三指引 2.1" },
+      f(D), [f(Math.log(1 / R0)), f(1 - R0), f(Math.log10(1 / (1 - R0))), f(D / 2)]);
   },
   "G-07": () => { // XYZ → xy
     let X, Y, Z; do { X = ri(10, 60); Y = ri(10, 60); Z = ri(10, 60); } while (X === Y || Y === Z || X === Z);
@@ -105,37 +105,42 @@ const GEN = {
     return mc({ id: "G-08", subj: "L11", codes: ["L11201"], diff: "易", level: "應用", dom: "D3",
       stem: `RGB 影像每個通道以 ${n} bit 記錄，理論上可表現多少種顏色？`,
       explain: `每通道 2^${n} = ${comma(2 ** n)} 階，三通道為 (2^${n})³ = ${comma(2 ** (3 * n))} 種。`,
-      trap: "只算單一通道，或把三通道相加而不是相乘。", src: "計算題模板；科目一指引 2.1" },
-      comma(2 ** (3 * n)), [comma(2 ** n), comma(3 * 2 ** n), comma(2 ** (n + 3))]);
+      trap: "誘答都是把位元數讀錯時的結果（例如誤用 8-bit 全彩的 16,777,216），量級相近，要真的會算才選得出來。", src: "計算題模板；科目一指引 2.1" },
+      comma(2 ** (3 * n)), [5, 6, 8, 10, 12, 16].filter(k => k !== n).sort((a, b) => Math.abs(a - n) - Math.abs(b - n)).slice(0, 3).map(k => comma(2 ** (3 * k))));
   }
 };
 window.__GEN = GEN;
+const GEN_FAM = { "G-01": "deltaE", "G-02": "lch", "G-03": "ncs", "G-04": "area", "G-05": "illum", "G-06": "density", "G-07": "xy", "G-08": "bitdepth" };
+const famOf = q => q.fam || GEN_FAM[q.id] || q.id;
 const GEN_BY_SUBJ = { L11: ["G-08"], L12: ["G-02", "G-03", "G-04"], L13: ["G-01", "G-05", "G-06", "G-07"] };
 const genFor = (subjs, diff) => Object.entries(GEN_BY_SUBJ).filter(([s]) => subjs.includes(s)).flatMap(([, g]) => g)
   .filter(g => !diff || GEN[g]().diff === diff);
 
 /* ---------- 組卷 ---------- */
 const seenN = id => history.seen[id] || 0;
-function pickBalanced(pool, n, used) {
-  // 先挑沒做過的、且盡量涵蓋不同內容代碼
+function pickBalanced(pool, n, used, fams) {
+  // 先挑沒做過的、盡量涵蓋不同內容代碼；同一場作答中，同概念的近似題只出一題
+  fams = fams || new Set();
   const out = [], codes = new Set();
-  const sorted = shuffle(pool.filter(q => !used.has(q.id))).sort((a, b) => seenN(a.id) - seenN(b.id));
-  for (const q of sorted) { if (out.length >= n) break; if (!codes.has(q.codes[0])) { out.push(q); codes.add(q.codes[0]); used.add(q.id); } }
-  for (const q of sorted) { if (out.length >= n) break; if (!used.has(q.id)) { out.push(q); used.add(q.id); } }
+  const ok = q => !used.has(q.id) && !fams.has(famOf(q));
+  const take = q => { out.push(q); used.add(q.id); fams.add(famOf(q)); codes.add(q.codes[0]); };
+  const sorted = shuffle(pool).sort((a, b) => seenN(a.id) - seenN(b.id));
+  for (const q of sorted) { if (out.length >= n) break; if (ok(q) && !codes.has(q.codes[0])) take(q); }
+  for (const q of sorted) { if (out.length >= n) break; if (ok(q)) take(q); }
   return out;
 }
 function assemble(subjs, n) {
   const pool = BANK.filter(q => subjs.includes(q.subj));
   const want = { "易": Math.round(n * 0.4), "中": Math.round(n * 0.4) }; want["難"] = n - want["易"] - want["中"];
-  const used = new Set(); let out = [];
+  const used = new Set(), fams = new Set(); let out = [];
   for (const d of ["易", "中", "難"]) {
-    let part = pickBalanced(pool.filter(q => q.diff === d), want[d], used);
-    // 計算題模板：每 10 題約換入 1 題新數字
-    const gens = genFor(subjs, d);
-    const g = Math.min(gens.length ? Math.floor(want[d] / 4) : 0, part.length);
-    for (let i = 0; i < g; i++) part[part.length - 1 - i] = GEN[pick(gens)]();
+    // 計算題模板：每 4 題約保留 1 題給「換數字」的平行題，同一模板一場只出一次
+    const gens = shuffle(genFor(subjs, d).filter(g => !fams.has(GEN_FAM[g])));
+    const g = Math.min(gens.length, Math.floor(want[d] / 4));
+    const part = pickBalanced(pool.filter(q => q.diff === d), want[d] - g, used, fams);
+    for (let i = 0; i < g; i++) { if (fams.has(GEN_FAM[gens[i]])) continue; part.push(GEN[gens[i]]()); fams.add(GEN_FAM[gens[i]]); }
     while (part.length < want[d]) { // 該難度題目不足，向其他難度借
-      const extra = pickBalanced(pool, 1, used); if (!extra.length) break; part.push(extra[0]);
+      const extra = pickBalanced(pool, 1, used, fams); if (!extra.length) break; part.push(extra[0]);
     }
     out = out.concat(part);
   }
@@ -144,21 +149,21 @@ function assemble(subjs, n) {
 function assembleDiag(parallel) {
   const base = DIAG_IDS.map(id => BANK.find(q => q.id === id));
   if (!parallel) return base;
-  const used = new Set(DIAG_IDS);
+  const used = new Set(DIAG_IDS), fams = new Set();
   return base.map(d => {
     const cell = BANK.filter(q => !q.diag && q.dom === d.dom && q.diff === d.diff);
     const alt = BANK.filter(q => !q.diag && q.dom === d.dom);
-    return pickBalanced(cell, 1, used)[0] || pickBalanced(alt, 1, used)[0] || d;
+    return pickBalanced(cell, 1, used, fams)[0] || pickBalanced(alt, 1, used, fams)[0] || d;
   });
 }
 function assembleRetry() {
   const wrongIds = Object.keys(history.wrong);
-  const used = new Set(), out = [];
+  const used = new Set(), fams = new Set(), out = [];
   for (const id of shuffle(wrongIds).slice(0, 20)) {
     const src = BANK.find(q => q.id === id) || { codes: [history.wrong[id]] };
     const par = BANK.filter(q => q.id !== id && q.codes[0] === src.codes[0]);
-    const p = pickBalanced(par, 1, used)[0] || (BANK.find(q => q.id === id && !used.has(id)));
-    if (p) { used.add(p.id); out.push(p); }
+    const p = pickBalanced(par, 1, used, fams)[0] || pickBalanced(BANK.filter(q => q.id === id), 1, used, fams)[0];
+    if (p) out.push(p);
   }
   return out;
 }
