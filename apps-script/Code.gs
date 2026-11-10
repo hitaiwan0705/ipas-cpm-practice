@@ -21,6 +21,7 @@ function doPost(e) {
     const sid = String(p.studentId || "").replace(/[^A-Za-z0-9]/g, "").slice(0, 12);
     if (!sid) return out_({ ok: false, error: "studentId" });
     const ss = SpreadsheetApp.getActiveSpreadsheet();
+    if (!ss.getSheetByName(SHEET_SESSION) || !ss.getSheetByName(SHEET_ITEMS)) setup();
     const now = new Date();
     ss.getSheetByName(SHEET_SESSION).appendRow([now, sid, p.sessionId, p.mode, p.subject, p.total, p.correct, p.score, p.durationSec, p.startedAt]);
     const rows = (p.items || []).map(r => [now, sid, p.sessionId, p.mode, r.id, r.subj, String(r.codes || "").split(",")[0], r.diff, r.dom, "'" + (r.got || ""), "'" + r.ans, r.ok, r.gen, r.codes]);
