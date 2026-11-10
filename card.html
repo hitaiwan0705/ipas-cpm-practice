@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>60 色票卡｜iPAS 練習站</title>
+<link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="style.css">
+<style>
+  .card-grid{max-width:860px}
+  @media print{ .card-grid{gap:4mm;padding:6mm} .cc-no{border:1px solid #999} }
+</style>
+</head>
+<body>
+<div class="wrap">
+<header class="noprint">
+  <h1>60 色票卡</h1>
+  <p>實作題以此卡的票號作答。色票依孟塞爾標記換算為 sRGB，顯示在中灰背景上；螢幕或印表機未經校正時只是近似色。</p>
+  <p><a href="index.html">回練習站</a>　<button class="btn" type="button" onclick="window.print()">列印</button></p>
+</header>
+<div id="g"></div>
+<p class="meta" id="note"></p>
+</div>
+<script src="bank.js"></script>
+<script>
+  // 加上 #specs 可顯示孟塞爾標記（教師用）
+  const showSpec = location.hash === "#specs";
+  const g = document.createElement("div"); g.className = "card-grid";
+  CARD.forEach(c => { const d = document.createElement("div"); d.className = "cc";
+    d.innerHTML = `<div class="cc-sw" style="background:${c.hex}"></div><span class="cc-no">${c.no}</span>` + (showSpec ? `<span class="cc-spec">${c.spec}</span>` : "");
+    g.append(d); });
+  document.getElementById("g").append(g);
+  if (showSpec) document.getElementById("note").textContent = "教師版：顯示孟塞爾標記（換算採 C 光源、Bradford 色適應至 sRGB D65）。";
+</script>
+</body>
+</html>
