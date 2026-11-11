@@ -184,14 +184,21 @@ function startSession(mode, label, items, subjLabel) {
   renderQuiz();
 }
 function normTickets(s) { return (s.match(/\d+/g) || []).map(x => x.padStart(2, "0").slice(-2)); }
+const digits = s => (s || "").replace(/\D/g, "").split("").filter(Boolean);
 function judge(q, raw) {
   if (q.type === "mc") return raw === q.ans;
+  if (q.prac) {
+    const t = digits(raw);
+    if (q.type === "code") return t.join("") === q.ans;
+    if (q.type === "set") return t.length === q.ans.length && [...t].sort().join() === [...q.ans].sort().join();
+    return t.join("") === q.ans.join("");
+  }
   if (q.type === "code") return (raw || "").replace(/\D/g, "") === q.ans;
   const t = normTickets(raw || "");
   if (q.type === "set") return t.length === q.ans.length && [...t].sort().join() === [...q.ans].sort().join();
   return t.join() === q.ans.join();
 }
-const ansText = q => Array.isArray(q.ans) ? q.ans.join(" ") : q.ans;
+const ansText = q => Array.isArray(q.ans) ? q.ans.join(q.prac ? "" : " ") : q.ans;
 
 function chipCard(compact) {
   const g = el("div", { class: "card-grid" + (compact ? " compact" : ""), role: "list", "aria-label": "60 色票卡" });
@@ -200,7 +207,7 @@ function chipCard(compact) {
 }
 function renderQuiz() {
   const s = session, v = $("#view"); v.innerHTML = "";
-  const hasTicket = s.items.some(q => ["seq", "set", "one"].includes(q.type) || /票號/.test(q.stem));
+  const hasTicket = false;
   const bar = el("div", { class: "bar" },
     el("span", { class: "timer", id: "timer" }, ""),
     el("span", { class: "meta" }, `${s.label}｜${s.items.length} 題`),
@@ -218,18 +225,32 @@ function renderQuiz() {
   tick(); timerId = setInterval(tick, 1000); window.scrollTo(0, 0);
 }
 function renderQ(q, i) {
-  const box = el("section", { class: "q", id: `q${i}` });
+  const box = el("section", { class: "q", id: `q${i}`, "data-qid": q.id });
   box.append(el("div", { class: "qhead" }, el("span", { class: "qnum" }, `第 ${i + 1} 題`),
     el("span", { class: `pill ${q.diff}` }, `${q.diff}｜${DIFF_NOTE[q.diff]}`), el("span", { class: "pill" }, SUBJ[q.subj]),
     el("span", { class: "pill" }, DOMAINS[q.dom]), q.gen ? el("span", { class: "pill" }, "隨機數字") : null));
   box.append(el("p", { class: "stem" }, q.stem));
+  const chipEl = (c, big) => el("div", { class: "chip" }, el("div", { class: "sw" + (big ? " big" : ""), style: `background:${c.hex}`, role: "img", "aria-label": c.label ? `色票 ${c.label}` : "色票" }), c.label ? el("span", { class: "lab" }, c.label) : null, el("span", { class: "spec" }, c.spec));
+  if (q.main || q.ends) {
+    const ref = el("div", { class: "panel ref" });
+    if (q.main) ref.append(el("div", { class: "chip" }, el("div", { class: "sw big", style: `background:${q.main.hex}` }), el("span", { class: "lab" }, q.main.label), el("span", { class: "spec" }, q.main.spec)));
+    if (q.ends) q.ends.forEach((c, k) => { if (k) ref.append(el("span", { class: "arrow", "aria-hidden": "true" }, q.chips ? "→ ？ ？ ？ →" : "")); ref.append(el("div", { class: "chip" }, el("div", { class: "sw big", style: `background:${c.hex}` }), el("span", { class: "lab" }, c.label), el("span", { class: "spec show" }, c.spec))); });
+    box.append(ref);
+  }
+  if (q.chips && q.chips.length) { const pnl = el("div", { class: "panel" }); q.chips.forEach(c => pnl.append(chipEl(c))); box.append(pnl); }
+  if (q.groups) {
+    const pnl = el("div", { class: "panel" });
+    q.groups.forEach(g => { const gs = el("div", { class: "gsw" }); g.chips.forEach(c => gs.append(chipEl(c))); pnl.append(el("div", { class: "group" }, el("span", { class: "gname" }, g.label), gs)); });
+    box.append(pnl);
+  }
   if (q.type === "mc") {
     const g = el("div", { class: "opts", role: "radiogroup" });
     q.opts.forEach((o, k) => { const L = "ABCD"[k], id = `q${i}${L}`;
       g.append(el("label", { class: "opt", for: id, "data-l": L }, el("input", { type: "radio", name: `q${i}`, id, value: L }), el("span", {}, `(${L}) ${o}`))); });
     box.append(g);
   } else {
-    const hint = { seq: "依序填入票號，以空格分隔", set: "填入所有符合的票號，順序不拘", one: "填入一個票號", code: "填入代號，例如 1234" }[q.type];
+    const hint = q.prac ? { seq: "依序輸入色票編號", set: "輸入所有符合的色票編號", one: "輸入一個編號", code: "依序輸入代號" }[q.type]
+      : { seq: "依序填入票號，以空格分隔", set: "填入所有符合的票號，順序不拘", one: "填入一個票號", code: "填入代號，例如 1234" }[q.type];
     box.append(el("div", { class: "ordin" }, el("label", { for: `q${i}in` }, "作答"), el("input", { id: `q${i}in`, type: "text", inputmode: "numeric", autocomplete: "off" }), el("span", { class: "meta" }, hint)));
   }
   box.append(el("div", { class: "feedback" }));
@@ -242,8 +263,10 @@ function finish() {
     const box = $(`#q${i}`);
     const raw = q.type === "mc" ? ($(`input[name="q${i}"]:checked`, box) || {}).value || "" : $(`#q${i}in`, box).value.trim();
     const ok = judge(q, raw); if (ok) right++;
-    const got = q.type === "mc" ? raw : (q.type === "code" ? raw.replace(/\D/g, "") : normTickets(raw).join(" "));
-    rows.push({ id: q.id, subj: SUBJ[q.subj], codes: q.codes.join(","), diff: q.diff, dom: DOMAINS[q.dom], got, ans: ansText(q), ok: ok ? 1 : 0, gen: q.gen ? 1 : 0 });
+    const got = q.type === "mc" ? raw : (q.prac ? digits(raw).join("") : (q.type === "code" ? raw.replace(/\D/g, "") : normTickets(raw).join(" ")));
+    const optText = L => L ? q.opts["ABCD".indexOf(L)] : "";
+    rows.push({ id: q.id, subj: SUBJ[q.subj], codes: q.codes.join(","), diff: q.diff, dom: DOMAINS[q.dom],
+      got: q.type === "mc" && got ? `${got}｜${optText(got)}` : got, ans: q.type === "mc" ? `${q.ans}｜${optText(q.ans)}` : ansText(q), ok: ok ? 1 : 0, gen: q.gen ? 1 : 0 });
     if (!q.gen) { history.seen[q.id] = seenN(q.id) + 1; if (ok) delete history.wrong[q.id]; else history.wrong[q.id] = q.codes[0]; }
     box.classList.add("done", ok ? "ok" : "bad");
     box.querySelectorAll(".opt").forEach(o => { if (o.dataset.l === q.ans) o.classList.add("right"); else if (o.dataset.l === raw) o.classList.add("wrong"); });
@@ -307,7 +330,7 @@ function home() {
   const diagParallel = history.diagDone;
   grid.append(modeCard("診斷卷", diagParallel ? "平行診斷卷：同領域、同難度換題，用來檢查複習成效。20 題約 30 分鐘。" : "第一次請先做這份。20 題涵蓋 7 個領域，交卷後顯示弱點。",
     [el("button", { class: "btn primary", type: "button", onclick: () => startSession("diag", diagParallel ? "平行診斷卷" : "診斷卷", assembleDiag(diagParallel), "三科混合") }, diagParallel ? "開始平行診斷卷" : "開始診斷卷"),
-     diagParallel ? el("button", { class: "btn", type: "button", onclick: () => startSession("diag", "診斷卷（原卷）", assembleDiag(false), "三科混合") }, "重做原卷") : null]));
+    ]));
   const sel = el("select", { id: "subj" }, ...[["L11", "色彩學"], ["L12", "色彩計畫實務"], ["L13", "色彩管理"], ["ALL", "三科混合"]].map(([v2, t]) => el("option", { value: v2 }, t)));
   const num = el("select", { id: "num" }, ...[10, 20, 30, 50].map(n => el("option", { value: n }, `${n} 題（${Math.round(n * 1.5)} 分鐘）`)));
   grid.append(modeCard("組卷練習", "依科目自動組卷，難度約易 4：中 4：難 2，優先出你沒做過的題目；計算題每次換數字。選 50 題即為正式考試長度。",
@@ -318,8 +341,6 @@ function home() {
     [el("button", { class: "btn primary", type: "button", disabled: wrongN ? null : "disabled", onclick: () => startSession("retry", "錯題重練", assembleRetry(), "依錯題") }, "開始")]));
   grid.append(modeCard("自由選題", "依科目、難度、領域篩選，自己挑題練習。建議搭配診斷卷標紅的領域。",
     [el("button", { class: "btn", type: "button", onclick: freePick }, "進入選題")]));
-  grid.append(modeCard("60 色票卡", "實作題以票號作答。可在作答時開啟，也可列印。",
-    [el("a", { class: "btn", href: "card.html" }, "開啟色票卡")]));
   grid.append(modeCard("使用說明", "練習順序建議、實作題作答方式、難度標示。",
     [el("a", { class: "btn", href: "guide.html" }, "查看說明")]));
   v.append(grid);

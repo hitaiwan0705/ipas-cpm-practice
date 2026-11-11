@@ -74,3 +74,18 @@ input,select{font:inherit;padding:6px 10px;border:1px solid var(--rule);border-r
 .ptext{flex:1;min-width:0}
 @media (max-width:480px){.row{grid-template-columns:7.5em 1fr 3.5em}}
 @media print{.noprint{display:none}body{background:#fff}}
+/* 一題一套色票 */
+.q .panel{background:var(--surround);border-radius:6px;padding:12px;display:flex;flex-wrap:wrap;gap:12px;align-items:flex-end}
+.q .panel.ref{gap:16px}
+.chip{display:grid;gap:4px;justify-items:center}
+.sw{width:64px;height:64px;border-radius:2px;outline:1px solid rgba(255,255,255,.6)}
+.sw.big{width:76px;height:76px}
+.lab{background:#fff;color:var(--ink);font-size:.82rem;font-weight:700;padding:0 8px;border-radius:3px;font-variant-numeric:tabular-nums}
+.spec{display:none;background:rgba(255,255,255,.92);color:var(--ink);font-size:.7rem;padding:0 6px;border-radius:3px}
+.spec.show,.q.done .spec{display:block}
+.arrow{color:#fff;align-self:center;font-size:1.1rem}
+.group{display:grid;gap:6px}
+.group .gname{color:#fff;font-weight:700;font-size:.85rem}
+.gsw{display:flex;gap:4px}
+.gsw .sw{width:50px;height:50px}
+@media (max-width:480px){.sw{width:52px;height:52px}.sw.big{width:60px;height:60px}}
