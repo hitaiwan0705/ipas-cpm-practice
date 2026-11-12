@@ -5,6 +5,9 @@ const BANK = window.BANK, CARD = window.CARD, DOMAINS = window.DOMAINS, DIAG_IDS
 const CFG = window.CONFIG || {};
 const SUBJ = { L11: "色彩學", L12: "色彩計畫實務", L13: "色彩管理" };
 const DIFF_NOTE = { "易": "單一主題", "中": "複合主題", "難": "複合應用" };
+// 實測難度：作答 ≥ 10 人次的題目依答對率分級（易≥70%、中40–69%、難<40%），組卷依此平衡；不足者用結構難度
+const PS = window.PSTAT || {};
+const eff = q => (PS[q.id] && PS[q.id].d) || q.diff;
 const $ = (s, r = document) => r.querySelector(s);
 const el = (t, a = {}, ...k) => { const e = document.createElement(t);
   for (const [x, v] of Object.entries(a)) { if (v == null) continue; if (x === "class") e.className = v; else if (x === "html") e.innerHTML = v; else if (x.startsWith("on")) e.addEventListener(x.slice(2), v); else e.setAttribute(x, v); }
@@ -114,7 +117,7 @@ const GEN_FAM = { "G-01": "deltaE", "G-02": "lch", "G-03": "ncs", "G-04": "area"
 const famOf = q => q.fam || GEN_FAM[q.id] || q.id;
 const GEN_BY_SUBJ = { L11: ["G-08"], L12: ["G-02", "G-03", "G-04"], L13: ["G-01", "G-05", "G-06", "G-07"] };
 const genFor = (subjs, diff) => Object.entries(GEN_BY_SUBJ).filter(([s]) => subjs.includes(s)).flatMap(([, g]) => g)
-  .filter(g => !diff || GEN[g]().diff === diff);
+  .filter(g => !diff || ((PS[g] && PS[g].d) || GEN[g]().diff) === diff);
 
 /* ---------- 組卷 ---------- */
 const seenN = id => history.seen[id] || 0;
@@ -137,7 +140,7 @@ function assemble(subjs, n) {
     // 計算題模板：每 4 題約保留 1 題給「換數字」的平行題，同一模板一場只出一次
     const gens = shuffle(genFor(subjs, d).filter(g => !fams.has(GEN_FAM[g])));
     const g = Math.min(gens.length, Math.floor(want[d] / 4));
-    const part = pickBalanced(pool.filter(q => q.diff === d), want[d] - g, used, fams);
+    const part = pickBalanced(pool.filter(q => eff(q) === d), want[d] - g, used, fams);
     for (let i = 0; i < g; i++) { if (fams.has(GEN_FAM[gens[i]])) continue; part.push(GEN[gens[i]]()); fams.add(GEN_FAM[gens[i]]); }
     while (part.length < want[d]) { // 該難度題目不足，向其他難度借
       const extra = pickBalanced(pool, 1, used, fams); if (!extra.length) break; part.push(extra[0]);
@@ -305,7 +308,8 @@ function finish() {
     const fb = $(".feedback", box); fb.innerHTML = "";
     fb.append(el("p", {}, el("span", { class: "verdict " + (ok ? "ok" : "bad") }, ok ? "答對" : (got ? `答錯（你的答案：${got}）` : "未作答")), el("b", {}, `　正確答案：${ansText(q)}`)),
       el("p", {}, el("b", {}, "解析："), q.explain), el("p", {}, el("b", {}, "誘答設計："), q.trap),
-      el("p", { class: "meta" }, `${q.id}｜內容代碼 ${q.codes.join("、")}｜出處：${q.src}`));
+      el("p", { class: "meta" }, `${q.id}｜內容代碼 ${q.codes.join("、")}｜出處：${q.src}`),
+      PS[q.id] && !PS[q.id].rewritten && PS[q.id].n >= 5 ? el("p", { class: "meta" }, `難度：${q.diff}（${DIFF_NOTE[q.diff]}）｜實測答對率 ${PS[q.id].p}%（${PS[q.id].n} 人次）` + (PS[q.id].d && PS[q.id].d !== q.diff ? `，實測屬「${PS[q.id].d}」` : "")) : null);
   });
   if (s.mode === "diag") history.diagDone = true;
   store.set("history", history);
@@ -376,7 +380,7 @@ function home() {
     ]));
   const sel = el("select", { id: "subj" }, ...[["L11", "色彩學"], ["L12", "色彩計畫實務"], ["L13", "色彩管理"], ["ALL", "三科混合"]].map(([v2, t]) => el("option", { value: v2 }, t)));
   const num = el("select", { id: "num" }, ...[10, 20, 30, 50].map(n => el("option", { value: n }, `${n} 題（${Math.round(n * 1.5)} 分鐘）`)));
-  grid.append(modeCard("組卷練習", "依科目自動組卷，難度約易 4：中 4：難 2，優先出你沒做過的題目；計算題每次換數字。選 50 題即為正式考試長度。",
+  grid.append(modeCard("組卷練習", "依科目自動組卷，依全班實測答對率平衡難度，約易 4：中 4：難 2，優先出你沒做過的題目；計算題每次換數字。選 50 題即為正式考試長度。",
     [el("label", { class: "sr", for: "subj" }, "科目"), sel, el("label", { class: "sr", for: "num" }, "題數"), num,
      el("button", { class: "btn primary", type: "button", onclick: () => { const s = sel.value, n = +num.value, subs = s === "ALL" ? ["L11", "L12", "L13"] : [s];
        startSession("form", `組卷練習（${s === "ALL" ? "三科混合" : SUBJ[s]}）`, assemble(subs, n), s === "ALL" ? "三科混合" : SUBJ[s]); } }, "開始")]));
