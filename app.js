@@ -198,6 +198,20 @@ function judge(q, raw) {
   if (q.type === "set") return t.length === q.ans.length && [...t].sort().join() === [...q.ans].sort().join();
   return t.join() === q.ans.join();
 }
+// 實作題格式檢查（11/12 作答分析：空白、照抄範例、輸入全部色票、位數不符）
+function pracIssues(q, raw) {
+  const t = digits(raw);
+  if (!t.length) return ["未作答"];
+  const iss = [];
+  const n = q.chips && q.chips.length ? q.chips.length : (q.groups ? q.groups.length : 0);
+  if (q.type !== "code" && n && t.some(d => +d < 1 || +d > n)) iss.push(`編號只能是 1–${n}`);
+  if (q.type !== "code" && new Set(t).size < t.length) iss.push("有重複的編號");
+  if ((q.type === "seq" || q.type === "code") && t.length !== q.ans.length) iss.push(`這題要輸入 ${q.ans.length} 個，你輸入了 ${t.length} 個`);
+  if (q.type === "one" && t.length !== 1) iss.push("這題只要輸入一個編號");
+  if (q.type === "set" && n && t.length >= n) iss.push("你選了全部色票，請確認是否每一張都符合條件");
+  if (q.type === "seq" && q.chips && t.length === q.chips.length && t.join("") === q.chips.map(c => c.label).join("")) iss.push("和色票的顯示順序完全相同，請確認是否真的排過");
+  return iss;
+}
 const ansText = q => Array.isArray(q.ans) ? q.ans.join(q.prac ? "" : " ") : q.ans;
 
 function chipCard(compact) {
@@ -251,13 +265,31 @@ function renderQ(q, i) {
   } else {
     const hint = q.prac ? { seq: "依序輸入色票編號", set: "輸入所有符合的色票編號", one: "輸入一個編號", code: "依序輸入代號" }[q.type]
       : { seq: "依序填入票號，以空格分隔", set: "填入所有符合的票號，順序不拘", one: "填入一個票號", code: "填入代號，例如 1234" }[q.type];
-    box.append(el("div", { class: "ordin" }, el("label", { for: `q${i}in` }, "作答"), el("input", { id: `q${i}in`, type: "text", inputmode: "numeric", autocomplete: "off" }), el("span", { class: "meta" }, hint)));
+    const inp = el("input", { id: `q${i}in`, type: "text", inputmode: "numeric", autocomplete: "off" });
+    const chk = el("span", { class: "chk", "aria-live": "polite" }, "");
+    if (q.prac) inp.addEventListener("input", () => {
+      if (!inp.value.trim()) { chk.textContent = ""; chk.className = "chk"; return; }
+      const iss = pracIssues(q, inp.value); chk.textContent = iss.length ? "⚠ " + iss.join("；") : "格式正確（不代表答案正確）"; chk.className = "chk " + (iss.length ? "warn" : "fine");
+    });
+    box.append(el("div", { class: "ordin" }, el("label", { for: `q${i}in` }, "作答"), inp, el("span", { class: "meta" }, hint), chk));
   }
   box.append(el("div", { class: "feedback" }));
   return box;
 }
 function finish() {
-  const s = session; if (!s || s.done) return; s.done = true; clearInterval(timerId);
+  const s = session; if (!s || s.done) return;
+  if (!s.checked) {
+    const probs = [];
+    s.items.forEach((q, i) => {
+      const box = $(`#q${i}`);
+      const raw = q.type === "mc" ? ($(`input[name="q${i}"]:checked`, box) || {}).value || "" : $(`#q${i}in`, box).value.trim();
+      const iss = q.prac && q.type !== "mc" ? pracIssues(q, raw) : (raw ? [] : ["未作答"]);
+      if (iss.length) probs.push([i, iss.join("；")]);
+    });
+    if (probs.length) { s.checked = true; showWarn(probs); return; }
+  }
+  s.done = true; clearInterval(timerId);
+  const w = $("#warnbox"); if (w) w.remove();
   const rows = []; let right = 0;
   s.items.forEach((q, i) => {
     const box = $(`#q${i}`);
@@ -282,6 +314,17 @@ function finish() {
     startedAt: new Date(s.start).toISOString(), endedAt: new Date().toISOString(), durationSec: dur, total: s.items.length, correct: right, score, items: rows };
   renderSummary(s, rows, right, score, dur);
   send(payload);
+}
+function showWarn(probs) {
+  const old = $("#warnbox"); if (old) old.remove();
+  const list = el("ul", {});
+  probs.forEach(([i, msg]) => list.append(el("li", {}, el("a", { href: `#q${i}` }, `第 ${i + 1} 題`), `：${msg}`)));
+  const box = el("div", { id: "warnbox", class: "warnbox", role: "alert" },
+    el("p", {}, el("b", {}, `還有 ${probs.length} 題需要確認`), "　空白或格式不符的題目會直接算錯。"), list,
+    el("div", { class: "row-btns" },
+      el("button", { class: "btn", type: "button", onclick: () => { session.checked = false; box.remove(); } }, "回去修改"),
+      el("button", { class: "btn primary", type: "button", onclick: finish }, "仍要交卷")));
+  $(".bar", $("#view")).after(box); window.scrollTo(0, 0);
 }
 function renderSummary(s, rows, right, score, dur) {
   const box = el("div", { class: "summary" });
