@@ -1,6 +1,6 @@
 # 由作答紀錄計算各題實測答對率與鑑別度，輸出 pstat.json 供網站組卷使用
 import json,collections as C,statistics as st,sys
-REWRITTEN={"L11-4002","L11-4005","L11-4014","L11-4016","L11-3023","L11-1024","L11-4012","L12-6107"}   # 11/12 改寫誘答，舊資料不再適用
+REWRITTEN={"L11-4002","L11-4005","L11-4014","L11-4016","L11-3023","L11-1024","L11-4012","L12-6107","L12-6106","L12-6105"}   # 11/12 改寫誘答，舊資料不再適用
 MIN_N=10
 d=json.load(open('clean.json')); S=d['S']
 ret={s['場次ID'] for s in S if '原卷' in s['模式']}
